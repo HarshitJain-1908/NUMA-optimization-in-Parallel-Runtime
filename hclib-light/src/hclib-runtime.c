@@ -64,8 +64,12 @@ void setup() {
     workers = (hclib_worker_state*) malloc(sizeof(hclib_worker_state) * nb_workers);
     for(int i=0; i<nb_workers; i++) {
       workers[i].deque = malloc(sizeof(deque_t));
+      workers[i].my_info = malloc(sizeof(taskInfo_t));
       void * val = NULL;
       dequeInit(workers[i].deque, val);
+      infoInit(workers[i].my_info);
+    //initialize taskInfo list
+
       workers[i].current_finish = NULL;
       workers[i].id = i;
     }
@@ -120,23 +124,40 @@ void spawn(task_t * task) {
 
 void hclib_async(generic_frame_ptr fct_ptr, void * arg) {
     task_t * task = malloc(sizeof(*task));
+    //assign async id to this task
+    int wid = hclib_current_worker();
+    workers[wid].async_counter++;
     *task = (task_t){
         ._fp = fct_ptr,
         .args = arg,
+        .task_id = workers[wid].async_counter,
     };
     spawn(task);
 }
 
+void reset_worker_AC_counter(int numWorkers) {
+    for(int i=0; i<numWorkers; i++) {
+        int workerID = workers[i].id;
+        workers[i].async_counter = workerID * UINT_MAX/numWorkers;
+    }
+}
+
+void reset_worker_SC_counters(int numWorkers) {
+    for(int i=0; i<numWorkers; i++) {
+        workers[i].steal_counter = 0;
+    }
+}
+
 void hclib_start_tracing() {
-   printf("start tracing\n");
+//    printf("start tracing\n");
    tracing_enabled = true;
-   //reset_worker_AC_counter(numWorkers);
+   reset_worker_AC_counter(nb_workers);
    /* Each worker’s AC value set to (workerID * UINT_MAX/numWorkers) */
-   //reset_worker_SC_counters(numWorkers);
+   reset_worker_SC_counters(nb_workers);
 }
 
 void hclib_stop_tracing() {
-    printf("stop tracing\n");
+    // printf("stop tracing\n");
    /*if(replay_enabled == false) {
      list_aggregation(numWorkers);
      list_sorting(numWorkers);
@@ -221,6 +242,18 @@ void hclib_finish(generic_frame_ptr fct_ptr, void * arg) {
     end_finish();
 }
 
+void append_task_info(infoList_t *my_info, taskInfo_t *info) {
+    if (my_info->head == 0) {
+        //list is empty
+        my_info->head = info;
+        my_info->tail = info;
+    } else {
+        //append to the tail
+        my_info->tail->next = info;
+        my_info->tail = info;
+    }
+}
+
 void* worker_routine(void * args) {
     int wid = *((int *) args);
    set_current_worker(wid);
@@ -230,13 +263,20 @@ void* worker_routine(void * args) {
            // try to steal
            int i = 1;
            while (i < nb_workers) {
-               task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-	       if(task) {
-                   workers[wid].total_steals++;
-                   break;
-               }
-	       i++;
-	   }
+                task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
+                if(task) {
+                    //append the task info to its list before executing
+                    taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
+                    info->task_id = task->task_id;
+                    info->wc_id = (wid+i)%(nb_workers);
+                    info->ws_id = wid;
+                    append_task_info(workers[wid].my_info, info);
+                    workers[wid].steal_counter++;
+                    workers[wid].total_steals++;
+                    break;
+                }
+                i++;
+	        }
         }
         if(task) {
             execute_task(task);

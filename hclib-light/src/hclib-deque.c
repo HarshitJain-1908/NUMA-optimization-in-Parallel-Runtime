@@ -27,6 +27,16 @@ void dequeInit(deque_t * deq, void * init_value) {
     }
 }
 
+void infoInit(infoList_t * my_info) {
+    my_info->head = 0;
+    // my_info->info = (volatile taskInfo_t **) malloc(sizeof(taskInfo_t*)*500);
+    // int i=0;
+    // while(i < 500) {
+    //     pool->data[i] = init_value;
+    //     i++;
+    // }
+}
+
 /*
  * push an entry onto the tail of the deque
  */

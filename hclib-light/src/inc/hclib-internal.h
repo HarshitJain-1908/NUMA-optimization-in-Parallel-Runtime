@@ -32,8 +32,11 @@ typedef struct finish_t {
 typedef struct hclib_worker_state {
     pthread_t tid; // the pthread associated
     struct finish_t* current_finish;
-    deque_t * deque;
+    deque_t *deque;
+    infoList_t *my_info;
     int id; // The id, identify a worker
     long total_push;
     long total_steals;
+    //worker metadata
+    unsigned async_counter, steal_counter;
 } hclib_worker_state;
