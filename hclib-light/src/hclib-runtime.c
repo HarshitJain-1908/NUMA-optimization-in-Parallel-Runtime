@@ -117,8 +117,17 @@ void spawn(task_t * task) {
     hclib_worker_state* ws = &workers[wid];
     check_in_finish(ws->current_finish);
     task->current_finish = ws->current_finish;
-    // push on worker deq
-    dequePush(ws->deque, task);
+    
+    if (replay_enabled && task->task_id == workers[wid].my_info->tail->task_id) {
+        //send this task its thief during trace iteration
+        int ws_id = workers[wid].my_info->tail->ws_id;
+        int sc = workers[wid].my_info->tail->steal_counter;
+        workers[ws_id].traced_steals_deque[sc]->data = (void *) task;
+        workers[wid].my_info->tail = workers[wid].my_info->tail->next;
+    } else {
+        // push on worker deq
+        dequePush(ws->deque, task);
+    }
     ws->total_push++;
 }
 
@@ -156,7 +165,6 @@ void hclib_start_tracing() {
 //    printf("start tracing\n");
    tracing_enabled = true;
    reset_worker_AC_counter(nb_workers);
-   /* Each worker’s AC value set to (workerID * UINT_MAX/numWorkers) */
    reset_worker_SC_counters(nb_workers);
 }
 
@@ -197,12 +205,6 @@ void list_aggregation() {
     }
     // printf("=====================================================\n");
 }
-
-// void cmp(const void *a, const void *b) {
-//     const infoList_t *l1 = a;
-//     const infoList_t *l2 = b;
-//     return l1->
-// }
 
 taskInfo_t* sortList(taskInfo_t* start, taskInfo_t* end) {
     if (start == NULL || end == NULL) return NULL;
@@ -290,6 +292,16 @@ void list_sorting() {
     }
 }
 
+void create_array_to_store_stolen_task() {
+    for (int i=0; i < nb_workers; i++) {
+        int size = workers[i].steal_counter;
+        workers[i].traced_steals_deque = (stolen_tasks_t*) malloc(size*(sizeof(stolen_tasks_t)));
+        // for (int j=0; j < size; j++) {
+        //     workers[i].traced_steals_deque[j]->data = ;
+        // }
+    }
+}
+
 void hclib_stop_tracing() {
     // // printf("stop tracing\n");
     for (int i=0; i < nb_workers; i++) {
@@ -299,36 +311,45 @@ void hclib_stop_tracing() {
         printf("-------------------------------------------------\n");
     }
     if(replay_enabled == false) {
-        list_aggregation(nb_workers);
-        list_sorting(nb_workers);
-        // create_array_to_store_stolen_task(nb_workers);
-        replay_enabled = true; 
+        list_aggregation();
+        list_sorting();
+        create_array_to_store_stolen_task();
+        replay_enabled = true;
+        for (int i=0; i < nb_workers; i++) {
+            workers[i].my_info->tail = workers[i].my_info->head;
+        }
     }
 }
 
 void slave_worker_finishHelper_routine(finish_t* finish) {
    int wid = hclib_current_worker();
    while(finish->counter > 0) {
-       task_t* task = dequePop(workers[wid].deque);
-       if (!task) {
-           // try to steal
-           int i = 1;
-           while(finish->counter > 0 && i < nb_workers) {
-               task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-                if(task) {
-                    //append the task info to its list before executing
-                    taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
-                    info->task_id = task->task_id;
-                    info->wc_id = (wid+i)%(nb_workers);
-                    info->ws_id = wid;
-                    info->steal_counter = workers[wid].steal_counter++;
-                    info->next = NULL;
-                    append_task_info(workers[wid].my_info, info);
-                    workers[wid].total_steals++;	   
-                    break;
+        task_t* task = dequePop(workers[wid].deque);
+        if (!task) {
+            if (replay_enabled) {
+                // spin_until_victim_transferred_task_at_index_SCvalue();
+                while (workers[wid].traced_steals_deque[workers[wid].steal_counter]->data == NULL);
+                task = (task_t *) workers[wid].traced_steals_deque[workers[wid].steal_counter]->data;
+            } else {
+                // try to steal
+                int i = 1;
+                while (i < nb_workers) {
+                    task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
+                    if(task) {
+                        //append the task info to its list before executing
+                        taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
+                        info->task_id = task->task_id;
+                        info->wc_id = (wid+i)%(nb_workers);
+                        info->ws_id = wid;
+                        info->steal_counter = workers[wid].steal_counter++;
+                        info->next = NULL;
+                        append_task_info(workers[wid].my_info, info);
+                        workers[wid].total_steals++;
+                        break;
+                    }
+                    i++;
                 }
-                i++;
-	        }
+            }
         }
         if(task) {
             execute_task(task);
@@ -374,9 +395,8 @@ void hclib_finalize() {
     int tpush=workers[0].total_push, tsteals=workers[0].total_steals;
     for(i=1;i< nb_workers; i++) {
         pthread_join(workers[i].tid, NULL);
-        printf("-------------------------------------------------\n");
-	tpush+=workers[i].total_push;
-	tsteals+=workers[i].total_steals;
+        tpush+=workers[i].total_push;
+        tsteals+=workers[i].total_steals;
     }
     double duration = (mysecond() - benchmark_start_time_stats) * 1000;
     printf("============================ Tabulate Statistics ============================\n");
@@ -418,26 +438,32 @@ void* worker_routine(void * args) {
     int wid = *((int *) args);
    set_current_worker(wid);
    while(not_done) {
-       task_t* task = dequePop(workers[wid].deque);
-       if (!task) {
-           // try to steal
-           int i = 1;
-           while (i < nb_workers) {
-                task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-                if(task) {
-                    //append the task info to its list before executing
-                    taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
-                    info->task_id = task->task_id;
-                    info->wc_id = (wid+i)%(nb_workers);
-                    info->ws_id = wid;
-                    info->steal_counter = workers[wid].steal_counter++;
-                    info->next = NULL;
-                    append_task_info(workers[wid].my_info, info);
-                    workers[wid].total_steals++;
-                    break;
+        task_t* task = dequePop(workers[wid].deque);
+        if (!task) {
+            if (replay_enabled) {
+                // spin_until_victim_transferred_task_at_index_SCvalue();
+                // while (!workers[wid].traced_steals_deque[workers[wid].steal_counter]->data);
+                // task = (task_t *) workers[wid].traced_steals_deque[workers[wid].steal_counter]->data;
+            } else {
+                // try to steal
+                int i = 1;
+                while (i < nb_workers) {
+                    task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
+                    if(task) {
+                        //append the task info to its list before executing
+                        taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
+                        info->task_id = task->task_id;
+                        info->wc_id = (wid+i)%(nb_workers);
+                        info->ws_id = wid;
+                        info->steal_counter = workers[wid].steal_counter++;
+                        info->next = NULL;
+                        append_task_info(workers[wid].my_info, info);
+                        workers[wid].total_steals++;
+                        break;
+                    }
+                    i++;
                 }
-                i++;
-	        }
+            }
         }
         if(task) {
             execute_task(task);

@@ -34,6 +34,7 @@ typedef struct hclib_worker_state {
     struct finish_t* current_finish;
     deque_t *deque;
     infoList_t *my_info;
+    stolen_tasks_t** traced_steals_deque;
     int id; // The id, identify a worker
     long total_push;
     long total_steals;
