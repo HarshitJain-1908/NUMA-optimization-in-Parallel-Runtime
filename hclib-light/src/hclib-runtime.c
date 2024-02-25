@@ -181,16 +181,113 @@ void list_aggregation() {
             t->next = NULL;
         }
     }
-    printf("After aggregation\n");
+    // printf("After aggregation\n");
+    // for (int i=0; i < nb_workers; i++) {
+    //     printf("-----------------------------------------------\n");
+    //     display_info_list(temp[i]);
+    //     printf("-----------------------------------------------\n");
+    // }
+    // printf("=====================================================\n");
+    //replace initial info lists by aggregated
     for (int i=0; i < nb_workers; i++) {
+        workers[i].my_info = temp[i];
         printf("-----------------------------------------------\n");
         display_info_list(temp[i]);
         printf("-----------------------------------------------\n");
     }
+    // printf("=====================================================\n");
+}
+
+// void cmp(const void *a, const void *b) {
+//     const infoList_t *l1 = a;
+//     const infoList_t *l2 = b;
+//     return l1->
+// }
+
+taskInfo_t* sortList(taskInfo_t* start, taskInfo_t* end) {
+    if (start == NULL || end == NULL) return NULL;
+    if (start == end) {
+        return start;
+    }
+    //recursively sort the two halves
+    //determine the middle of linked list
+    taskInfo_t *slow, *fast, *prev = NULL;
+    slow = fast = start;
+    while (fast != NULL && fast->next != NULL) {
+        prev = slow;
+        slow = slow->next;
+        fast = fast->next->next;
+    }
+    taskInfo_t *head1, *head2;
+    if (fast != NULL) {
+        prev = slow->next;
+        slow->next = NULL;
+        // printf("start-> %u slow-> %u\n", start->task_id, slow->task_id);
+        head1 = sortList(start, slow);
+        head2 = sortList(prev, end);
+        // printf("after head1-> %u head2-> %u\n", head1->task_id, head2->task_id);
+    }else {
+        if (prev != NULL) prev->next = NULL;
+        // printf("else start-> %u slow-> %u\n", start->task_id, slow->task_id);
+        head1 = sortList(start, prev);
+        head2 = sortList(slow, end);
+        // printf("else after head1-> %u head2-> %u\n", head1->task_id, head2->task_id);
+    }
+
+    //now merge the two sorted halves
+    taskInfo_t *cur1, *cur2, *head, *cur, *tail;
+    cur1 = head1; cur2 = head2; cur = head = NULL;
+    while (cur1 != NULL && cur2 != NULL) {
+        if (cur1->task_id <= cur2->task_id) {
+            if (head == NULL) {
+                head = cur = cur1;
+            }else {
+                cur->next = cur1;
+                cur = cur->next;
+            }
+            cur1 = cur1->next;
+        }else {
+            if (head == NULL) {
+                head = cur = cur2;
+            }else {
+                cur->next = cur2;
+                cur = cur->next;
+            }
+            cur2 = cur2->next;
+        }
+    }
+    while (cur1 != NULL) {
+        if (head == NULL) {
+            head = cur = cur1;
+        }else {
+            cur->next = cur1;
+            cur = cur->next;
+        }
+        cur1 = cur1->next;
+    }
+    while (cur2 != NULL) {
+        if (head == NULL) {
+            head = cur = cur2;
+        }else {
+            cur->next = cur2;
+            cur = cur->next;
+        }
+        cur2 = cur2->next;
+    }
+    // printf("after sorting head-> %u \n", head->task_id);
+    return head;
 }
 
 void list_sorting() {
-
+    //sort all the aggregated info lists by steal counter
+    for (int i=0; i < nb_workers; i++) {
+        // printf("W%d sorting starts\n", i);
+        workers[i].my_info->head = sortList(workers[i].my_info->head, workers[i].my_info->tail);
+        printf("W%d list after sorting\n", i);
+        display_info_list(workers[i].my_info);
+        // int size = sizeof(workers[i].my_info) / sizeof(infoList_t*);
+        // qsortList(workers[i].my_info, size, sizeof(infoList_t*), cmp);
+    }
 }
 
 void hclib_stop_tracing() {
@@ -203,7 +300,7 @@ void hclib_stop_tracing() {
     }
     if(replay_enabled == false) {
         list_aggregation(nb_workers);
-        // list_sorting(nb_workers);
+        list_sorting(nb_workers);
         // create_array_to_store_stolen_task(nb_workers);
         replay_enabled = true; 
     }
@@ -314,7 +411,7 @@ void append_task_info(infoList_t *my_info, taskInfo_t *info) {
         my_info->tail->next = info;
         my_info->tail = info;
     }
-    printf("W%d tail: %u\n", hclib_current_worker(), my_info->tail->task_id);
+    // printf("W%d tail: %u\n", hclib_current_worker(), my_info->tail->task_id);
 }
 
 void* worker_routine(void * args) {
