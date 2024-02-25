@@ -16,7 +16,7 @@
 
 #define SIZE 25165824
 #define ITERATIONS 64
-#define THRESHOLD 512
+#define THRESHOLD 2048
 
 double* myNew, *myVal;
 int n;
@@ -27,14 +27,14 @@ long get_usecs () {
   return t.tv_sec*1000000+t.tv_usec;
 }
  
-int ceilDiv(int d) {
-  int m = SIZE / d;
-  if (m * d == SIZE) {
-    return m;
-  } else {
-    return (m + 1);
-  }
-}
+// int ceilDiv(int d) {
+//   int m = SIZE / d;
+//   if (m * d == SIZE) {
+//     return m;
+//   } else {
+//     return (m + 1);
+//   }
+// }
 
 void recurse(uint64_t low, uint64_t high) {
   if((high - low) > THRESHOLD) {

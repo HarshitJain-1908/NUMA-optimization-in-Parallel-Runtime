@@ -1,6 +1,6 @@
 include $(HCLIB_ROOT)/include/hclib.mak
 
-TARGETS := fib fib-reducer iterative_averaging
+TARGETS := iterative_averaging
 
 all: clean $(TARGETS) clean-obj
 
