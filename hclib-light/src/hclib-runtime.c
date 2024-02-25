@@ -64,7 +64,7 @@ void setup() {
     workers = (hclib_worker_state*) malloc(sizeof(hclib_worker_state) * nb_workers);
     for(int i=0; i<nb_workers; i++) {
       workers[i].deque = malloc(sizeof(deque_t));
-      workers[i].my_info = malloc(sizeof(taskInfo_t));
+      workers[i].my_info = malloc(sizeof(infoList_t));
       void * val = NULL;
       dequeInit(workers[i].deque, val);
       infoInit(workers[i].my_info);
@@ -132,13 +132,17 @@ void hclib_async(generic_frame_ptr fct_ptr, void * arg) {
         .args = arg,
         .task_id = workers[wid].async_counter,
     };
+    // printf("W%d creates async with id %u\n", wid, workers[wid].async_counter);
     spawn(task);
 }
 
 void reset_worker_AC_counter(int numWorkers) {
-    for(int i=0; i<numWorkers; i++) {
+    workers[0].async_counter = 0;
+    printf("W%d AC = %u\n", 0, workers[0].async_counter);
+    for(int i=1; i<numWorkers; i++) {
         int workerID = workers[i].id;
-        workers[i].async_counter = workerID * UINT_MAX/numWorkers;
+        workers[i].async_counter = workers[i-1].async_counter + UINT_MAX / numWorkers;
+        printf("W%d AC = %u\n", workerID, workers[i].async_counter);
     }
 }
 
@@ -156,14 +160,53 @@ void hclib_start_tracing() {
    reset_worker_SC_counters(nb_workers);
 }
 
+void list_aggregation() { 
+    //aggregate all the lists based on wc_id
+    //create new info lists for aggregation
+    infoList_t **temp = (infoList_t**) malloc(nb_workers * sizeof(infoList_t*));
+    for (int i=0;i < nb_workers; i++) {
+        temp[i] = (infoList_t*) malloc(sizeof(infoList_t*));
+        infoInit(temp[i]);
+    }
+    for (int i=0; i < nb_workers; i++) {
+        //traverse ith worker info list and transfer the stolen asyncs to its corresponding creator
+        taskInfo_t *cur = workers[i].my_info->head;
+        while (cur != NULL) {
+            int c_id = cur->wc_id;
+            //add this task to c_id's info list
+            append_task_info(temp[c_id], cur);
+            // printf("appending %u, from W%d to W%d\n", cur->task_id, i, c_id);
+            taskInfo_t *t = cur;
+            cur = cur->next;
+            t->next = NULL;
+        }
+    }
+    printf("After aggregation\n");
+    for (int i=0; i < nb_workers; i++) {
+        printf("-----------------------------------------------\n");
+        display_info_list(temp[i]);
+        printf("-----------------------------------------------\n");
+    }
+}
+
+void list_sorting() {
+
+}
+
 void hclib_stop_tracing() {
-    // printf("stop tracing\n");
-   /*if(replay_enabled == false) {
-     list_aggregation(numWorkers);
-     list_sorting(numWorkers);
-     create_array_to_store_stolen_task(numWorkers);
-     replay_enabled = true; 
-   } */
+    // // printf("stop tracing\n");
+    for (int i=0; i < nb_workers; i++) {
+        printf("-------------------------------------------------\n");
+        printf("W%d push: %d steals: %lu\n", i, workers[i].total_push, workers[i].steal_counter);
+        display_info_list(workers[i].my_info);
+        printf("-------------------------------------------------\n");
+    }
+    if(replay_enabled == false) {
+        list_aggregation(nb_workers);
+        // list_sorting(nb_workers);
+        // create_array_to_store_stolen_task(nb_workers);
+        replay_enabled = true; 
+    }
 }
 
 void slave_worker_finishHelper_routine(finish_t* finish) {
@@ -175,12 +218,20 @@ void slave_worker_finishHelper_routine(finish_t* finish) {
            int i = 1;
            while(finish->counter > 0 && i < nb_workers) {
                task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-	       if(task) {
-		   workers[wid].total_steals++;	   
-	           break;
-	       }
-	       i++;
-	   }
+                if(task) {
+                    //append the task info to its list before executing
+                    taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
+                    info->task_id = task->task_id;
+                    info->wc_id = (wid+i)%(nb_workers);
+                    info->ws_id = wid;
+                    info->steal_counter = workers[wid].steal_counter++;
+                    info->next = NULL;
+                    append_task_info(workers[wid].my_info, info);
+                    workers[wid].total_steals++;	   
+                    break;
+                }
+                i++;
+	        }
         }
         if(task) {
             execute_task(task);
@@ -211,6 +262,14 @@ void end_finish(){
     free(current_finish);
 }
 
+void display_info_list(infoList_t *my_list) {
+    taskInfo_t *cur = my_list->head;
+    while (cur != NULL) {
+        printf("%u %d %d %u\n", cur->task_id, cur->wc_id, cur->ws_id, cur->steal_counter);
+        cur = cur->next;
+    }
+}
+
 void hclib_finalize() {
     end_finish();
     not_done = 0;
@@ -218,6 +277,7 @@ void hclib_finalize() {
     int tpush=workers[0].total_push, tsteals=workers[0].total_steals;
     for(i=1;i< nb_workers; i++) {
         pthread_join(workers[i].tid, NULL);
+        printf("-------------------------------------------------\n");
 	tpush+=workers[i].total_push;
 	tsteals+=workers[i].total_steals;
     }
@@ -243,15 +303,18 @@ void hclib_finish(generic_frame_ptr fct_ptr, void * arg) {
 }
 
 void append_task_info(infoList_t *my_info, taskInfo_t *info) {
-    if (my_info->head == 0) {
+    if (my_info->head == NULL) {
+        // printf("first time W%d my_info\n", hclib_current_worker());
         //list is empty
         my_info->head = info;
         my_info->tail = info;
     } else {
+        // printf("W%d my_info\n", hclib_current_worker());
         //append to the tail
         my_info->tail->next = info;
         my_info->tail = info;
     }
+    printf("W%d tail: %u\n", hclib_current_worker(), my_info->tail->task_id);
 }
 
 void* worker_routine(void * args) {
@@ -270,8 +333,9 @@ void* worker_routine(void * args) {
                     info->task_id = task->task_id;
                     info->wc_id = (wid+i)%(nb_workers);
                     info->ws_id = wid;
+                    info->steal_counter = workers[wid].steal_counter++;
+                    info->next = NULL;
                     append_task_info(workers[wid].my_info, info);
-                    workers[wid].steal_counter++;
                     workers[wid].total_steals++;
                     break;
                 }

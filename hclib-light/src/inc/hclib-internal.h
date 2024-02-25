@@ -38,5 +38,5 @@ typedef struct hclib_worker_state {
     long total_push;
     long total_steals;
     //worker metadata
-    unsigned async_counter, steal_counter;
+    unsigned int async_counter, steal_counter;
 } hclib_worker_state;
