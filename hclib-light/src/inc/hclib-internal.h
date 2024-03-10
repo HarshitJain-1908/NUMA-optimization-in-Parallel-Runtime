@@ -35,7 +35,8 @@ typedef struct hclib_worker_state {
     deque_t *deque;
     infoList_t *my_info;
     task_t** traced_steals_deque;
-    volatile bool available_traced_steals_tasks;
+    pthread_mutex_t lock;
+    volatile bool *available_traced_steals_tasks;
     int size;
     int id; // The id, identify a worker
     long total_push;
@@ -43,3 +44,5 @@ typedef struct hclib_worker_state {
     //worker metadata
     unsigned int async_counter, steal_counter;
 } hclib_worker_state;
+
+// typedef struct traced_deque

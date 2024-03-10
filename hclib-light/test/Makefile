@@ -5,7 +5,7 @@ TARGETS := iterative_averaging
 all: clean $(TARGETS) clean-obj
 
 %: %.cpp
-	$(CXX) -O3 $(PROJECT_CXXFLAGS) $(PROJECT_LDFLAGS) -o $@ $^  $(PROJECT_LDLIBS)
+	$(CXX) -O3 $(PROJECT_CXXFLAGS) $(PROJECT_LDFLAGS) -o $@ $^  $(PROJECT_LDLIBS) -g
 
 clean-obj:
 	rm -rf *.o

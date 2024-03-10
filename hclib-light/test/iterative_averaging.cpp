@@ -16,7 +16,7 @@
 
 #define SIZE 25165824
 #define ITERATIONS 64
-#define THRESHOLD 2048
+#define THRESHOLD 2048//786432//1572864//3145728//786432//3145728//2048
 
 double* myNew, *myVal;
 int n;
@@ -39,8 +39,8 @@ long get_usecs () {
 void recurse(uint64_t low, uint64_t high) {
   if((high - low) > THRESHOLD) {
     uint64_t mid = (high+low)/2;
-    hclib::finish([&]() {
-        hclib::async([&]( ){
+    hclib::finish([=]() {
+        hclib::async([=]( ){
 	   /* An async task */
 	   recurse(low, mid);
 	});
@@ -56,6 +56,9 @@ void recurse(uint64_t low, uint64_t high) {
 
 void runParallel() {
   for(int i=0; i<ITERATIONS; i++) {
+    printf("============================================\n");
+    printf("Iteration%d\n", i+1);
+    printf("============================================\n");
     hclib::start_tracing();
     recurse(1, SIZE+1);
     double* temp = myNew;
