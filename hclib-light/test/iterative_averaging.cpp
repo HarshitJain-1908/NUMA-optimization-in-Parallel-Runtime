@@ -56,9 +56,9 @@ void recurse(uint64_t low, uint64_t high) {
 
 void runParallel() {
   for(int i=0; i<ITERATIONS; i++) {
-    printf("============================================\n");
-    printf("Iteration%d\n", i+1);
-    printf("============================================\n");
+    // printf("============================================\n");
+    // printf("Iteration%d\n", i+1);
+    // printf("============================================\n");
     hclib::start_tracing();
     recurse(1, SIZE+1);
     double* temp = myNew;
