@@ -16,7 +16,7 @@
 
 #define SIZE 25165824
 #define ITERATIONS 64
-#define THRESHOLD 2048//786432//1572864//3145728//786432//3145728//2048
+#define THRESHOLD 4096//1024//2048//786432//1572864//3145728//786432//3145728//2048
 
 double* myNew, *myVal;
 int n;
@@ -26,15 +26,6 @@ long get_usecs () {
   gettimeofday(&t,NULL);
   return t.tv_sec*1000000+t.tv_usec;
 }
- 
-// int ceilDiv(int d) {
-//   int m = SIZE / d;
-//   if (m * d == SIZE) {
-//     return m;
-//   } else {
-//     return (m + 1);
-//   }
-// }
 
 void recurse(uint64_t low, uint64_t high) {
   if((high - low) > THRESHOLD) {
@@ -89,7 +80,7 @@ int main(int argc, char** argv) {
 
   double dur = ((double)(end-start))/1000000;
 
-  printf("Time = %.3f\n",dur);
+  printf("Time = %.3fs\n",dur);
   
   //printf("After averaging array is:\n");
  
