@@ -19,7 +19,7 @@
 pthread_key_t selfKey;
 pthread_once_t selfKeyInitialized = PTHREAD_ONCE_INIT;
 
-pthread_mutex_t lock;
+// pthread_mutex_t lock;
 
 hclib_worker_state* workers;
 int * worker_id;
@@ -56,12 +56,80 @@ int hclib_num_workers() {
     return nb_workers;
 }
 
+
+
+// int get_nb_cpus() {
+//     int numCPU = sysconf(_SC_NPROCESSORS_ONLN);
+//     return numCPU;
+// }
+
+// void bind_thread_with_mask(int *mask, int lg) {
+//     cpu_set_t cpuset;
+//     if (mask != NULL) {
+//         CPU_ZERO(&cpuset);
+
+//         /* Copy the mask from the int array to the cpuset */
+//         int i;
+//         for (i = 0; i < lg; i++) {
+//             CPU_SET(mask[i], &cpuset);
+//         }
+
+//         /* Set affinity */
+//         int res = sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+//         if (res != 0) {
+//             printf("ERROR: ");
+//             if (errno == ESRCH) {
+//                 HASSERT("THREADBINDING ERROR: ESRCH: Process not found!\n");
+//             }
+//             if (errno == EINVAL) {
+//                 HASSERT("THREADBINDING ERROR: EINVAL: CPU mask does not contain any actual physical processor\n");
+//             }
+//             if (errno == EFAULT) {
+//                 HASSERT("THREADBINDING ERROR: EFAULT: memory address was invalid\n");
+//             }
+//             if (errno == EPERM) {
+//                 HASSERT("THREADBINDING ERROR: EPERM: process does not have appropriate privileges\n");
+//             }
+//         }
+//     }
+// }
+
+// /* Bind threads in a round-robin fashion */
+// void bind_thread_rr(int worker_id) {
+//     /*bind worker_id to cpu_id round-robin fashion*/
+//     int nbCPU = get_nb_cpus();
+//     int mask = worker_id % nbCPU;
+//     //printf("HCLIB: INFO -- Binding worker %d to cpu_id %d\n", worker_id, mask);
+//     bind_thread_with_mask(&mask, 1);
+// }
+
+// /* Bind threads according to bind map */
+// void bind_thread_map(int worker_id, int *bind_map, int bind_map_size) {
+//     int mask = bind_map[worker_id % bind_map_size];
+//     //printf("HCLIB: INFO -- Binding worker %d to cpu_id %d\n", worker_id, mask);
+//     bind_thread_with_mask(&mask, 1);
+// }
+
+// /** Thread binding api to bind a worker thread using a particular binding strategy **/
+// void bind_thread(int worker_id, int *bind_map, int bind_map_size) {
+//     if (bind_map_size == 0) {
+//         /* Round robin binding */
+//         bind_thread_rr(worker_id);
+//     } else if (bind_map_size > 0 && bind_map != NULL) {
+//         bind_thread_map(worker_id, bind_map, bind_map_size);
+//     } else {
+//         fprintf(stderr, "ERROR: unknown thread binding strategy\n");
+//         HASSERT(0);
+//     }
+// }
+
+
 //FWD declaration for pthread_create
 void * worker_routine(void * args);
 
 void setup() {
     // Build queues
-    pthread_mutex_init(&lock, NULL);
+    // pthread_mutex_init(&lock, NULL);
     not_done = 1;
     pthread_once(&selfKeyInitialized, initializeKey);
     workers = (hclib_worker_state*) malloc(sizeof(hclib_worker_state) * nb_workers);
@@ -116,15 +184,6 @@ void execute_task(task_t * task) {
     free(task);
 }
 
-// void exec(task_t* task) {
-//     finish_t* current_finish = task->current_finish;
-//     int wid = hclib_current_worker();
-//     hclib_worker_state* ws = &workers[wid];
-//     ws->current_finish = current_finish;
-//     task->_fp((void *)task->args);
-//     check_out_finish(current_finish);
-// }
-
 void spawn(task_t * task) {
     // get current worker
     int wid = hclib_current_worker();
@@ -174,13 +233,12 @@ void spawn(task_t * task) {
 
 void hclib_async(generic_frame_ptr fct_ptr, void * arg) {
     task_t * task = malloc(sizeof(*task));
-    //assign async id to this task
     int wid = hclib_current_worker();
     workers[wid].async_counter++;
     *task = (task_t){
         ._fp = fct_ptr,
         .args = arg,
-        .task_id = workers[wid].async_counter,
+        .task_id = workers[wid].async_counter, //assign async id to this task
     };
     // printf("W%d creates async with id %u\n", wid, workers[wid].async_counter);
     spawn(task);
@@ -436,6 +494,7 @@ void slave_worker_finishHelper_routine(finish_t* finish) {
                     // printf("Slave W%d set for pickup from SC:%u\n", wid, workers[wid].steal_counter);
                     // printf("slave executing task %u by W%d sc=%u\n", task->task_id, wid, workers[wid].steal_counter);
                     workers[wid].steal_counter++;
+                    workers[wid].total_steals++;
                     // if (workers[wid].steal_counter == workers[wid].size) {
                     //     workers[wid].available_traced_steals_tasks[workers[wid].steal_counter] = false;
                     //     // printf("in slave making it false for W%d %d ?? %d\n", wid, workers[wid].steal_counter, workers[wid].size);
@@ -517,7 +576,7 @@ void display_info_list(infoList_t *my_list) {
 void hclib_finalize() {
     end_finish();
     not_done = 0;
-    pthread_mutex_destroy(&lock);
+    // pthread_mutex_destroy(&lock);
     int i;
     int tpush=workers[0].total_push, tsteals=workers[0].total_steals;
     for(i=1;i< nb_workers; i++) {
@@ -577,10 +636,7 @@ void* worker_routine(void * args) {
                 // printf("hey from W%d\n", wid);
                 // printf("hey from W%d sc=%u status:%d\n", wid, workers[wid].steal_counter, workers[wid].available_traced_steals_tasks[workers[wid].steal_counter]);
                 // printf("hey from W%d sc:%u\n", wid, workers[wid].steal_counter);
-                if (workers[wid].steal_counter == workers[wid].size) {
-                    // printf("mera h W%d\n", wid);
-                    continue;
-                }
+                if (workers[wid].steal_counter == workers[wid].size) continue;
                 // printf("hey from W%d sc:%u\n", wid, workers[wid].steal_counter);
                 while (!workers[wid].available_traced_steals_tasks[workers[wid].steal_counter]);
                 // printf("W%d set for pickup from SC:%u\n", wid, workers[wid].steal_counter);
@@ -595,6 +651,7 @@ void* worker_routine(void * args) {
                     // if (wid == 1) printf("executing task %u by W%d from sc=%u\n", task->task_id, wid, workers[wid].steal_counter);
                     // printf("oof\n");
                     workers[wid].steal_counter++;
+                    workers[wid].total_steals++;
                     // if (workers[wid].steal_counter == workers[wid].size) {
                     //     workers[wid].available_traced_steals_tasks[workers[wid].steal_counter] = false;
                     //     printf("making it false for W%d %d ?? %d\n", wid, workers[wid].steal_counter, workers[wid].size);
@@ -629,8 +686,8 @@ void* worker_routine(void * args) {
                         info->ws_id = wid;
                         info->steal_counter = workers[wid].steal_counter++;
                         info->next = NULL;
-                        append_task_info(workers[wid].my_info, info);
                         workers[wid].total_steals++;
+                        append_task_info(workers[wid].my_info, info);
                         break;
                     }
                     i++;
