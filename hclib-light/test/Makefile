@@ -1,14 +1,14 @@
 include $(HCLIB_ROOT)/include/hclib.mak
 
-TARGETS := iterative_averaging
+TARGETS := trace_and_replay_iterative_averaging iterative_averaging
 
-all: clean $(TARGETS) clean-obj
+all: $(TARGETS)
 
-%: %.cpp
-	$(CXX) -O3 $(PROJECT_CXXFLAGS) $(PROJECT_LDFLAGS) -o $@ $^  $(PROJECT_LDLIBS) -g
+trace_and_replay_iterative_averaging: iterative_averaging.cpp
+	$(CXX) -O3 -DUSE_TRACE_AND_REPLAY $(PROJECT_CXXFLAGS) $(PROJECT_LDFLAGS) -o $@ $^  $(PROJECT_LDLIBS) -g
 
-clean-obj:
-	rm -rf *.o
+iterative_averaging: iterative_averaging.cpp
+	$(CXX) -O3 $(PROJECT_CXXFLAGS) $(PROJECT_LDFLAGS) -o $@ $^  $(PROJECT_LDLIBS)
 
 clean:
 	rm -rf *.o $(TARGETS)
