@@ -94,10 +94,7 @@ void * dequePop(deque_t * deq) {
 
     int size = tail - head;
     if (size < 0) {
-        //change
-        // hc_mfence();
         deq->tail = deq->head;
-        // hc_mfence();
         return NULL;
     }
     void * rt = (void*) deq->data[(tail) % INIT_DEQUE_CAPACITY];
@@ -111,8 +108,6 @@ void * dequePop(deque_t * deq) {
         rt = NULL; /* losing in competition */
 
     /* now the deque is empty */
-    // hc_mfence();
     deq->tail = deq->head;
-    // hc_mfence();
     return rt;
 }
