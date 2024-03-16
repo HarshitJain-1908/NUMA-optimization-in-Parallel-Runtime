@@ -16,10 +16,8 @@
 
 #define SIZE 25165824
 #define ITERATIONS 64
-#define THRESHOLD 4096//1024//2048//786432//1572864//3145728//786432//3145728//2048
+#define THRESHOLD 4096
 
-// double* myNew, *myVal;
-// double* myNew_s, *myVal_s;
 double* myNew, *myVal, *initialOutput;
 int n;
 
@@ -50,9 +48,14 @@ void recurse(uint64_t low, uint64_t high) {
 void runParallel() {
   for(int i=0; i<ITERATIONS; i++) {
     #ifdef USE_TRACE_AND_REPLAY
-      printf("============================================\n");
-      printf("Iteration%d\n", i+1);
-      printf("============================================\n");
+      if (i==0) {
+        printf("============================================\n");
+        printf("Tracing begins...\n");
+      }else if (i==1) {
+        printf("============================================\n");
+        printf("Tracing end, now replay begins...\n");
+        printf("============================================\n");
+      }
       hclib::start_tracing();
       recurse(1, SIZE+1);
       double* temp = myNew;
@@ -76,10 +79,12 @@ void validateOutput() {
     if (diff > 1e-20) {
       printf("ERROR: validation failed!\n");
       printf("Diff: myVal[%d]=%.3f != initialOutput[%d]=%.3f",i,curr,i,init);
-      break;
+      return;
     }
   }
-  printf("after validation\n");
+
+  printf("============================================\n");
+  printf("Validation: SUCCESS\n\n");
 }
 
 void runSequential() {
@@ -118,11 +123,13 @@ int main(int argc, char** argv) {
   long end = get_usecs();
   double dur = ((double)(end-start))/1000000;
 
+  printf("Iterative averaging done\n");
+
 #ifdef VERIFY
   validateOutput();
 #endif
 
-  printf("Time = %.3f\n",dur);
+  printf("Time = %.3fs\n",dur);
   delete(myNew);
   delete(myVal);
   delete(initialOutput);
