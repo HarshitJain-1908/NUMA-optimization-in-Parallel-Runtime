@@ -1,8 +1,20 @@
+// #ifndef _GNU_SOURCE
+// #define _GNU_SOURCE
+// #endif
+
+// #if !defined(_GNU_SOURCE) || (_GNU_SOURCE != 1)
+// #define _GNU_SOURCE 1
+// #endif
+
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <unistd.h>
+#include <sched.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
