@@ -15,5 +15,5 @@ Run the makefile with relevant compile time flags:
 <br></br>
 Note:
 
-  * taskset binds the threads to specific cores during the complete execution of the program to respect the locality
+  * taskset binds the threads to specific cores to respect the locality during the complete execution of the program
   * numactl -i all is used for interleaved memory allocation across all the NUMA nodes on the underlying processor.
