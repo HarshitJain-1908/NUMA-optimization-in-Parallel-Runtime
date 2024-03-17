@@ -128,12 +128,7 @@ void spawn(task_t * task) {
         int sc = workers[wid].my_info->tail->steal_counter;
 
         workers[ws_id].traced_steals_deque[sc] = task;
-        
-        // printf("Store task_id:%u @ W%d at sc=%d\n", workers[ws_id].traced_steals_deque[sc]->task_id, ws_id, sc);
-
         workers[ws_id].available_traced_steals_tasks[sc] = true;
-        // printf("Store task_id:%u @ W%d at sc=%d\n", ((task_t*)(ws1->deque->data[sc]))->task_id, ws_id, sc);
-
         workers[wid].my_info->tail = workers[wid].my_info->tail->next;
     } else {
         // push on worker deq
@@ -340,8 +335,8 @@ void slave_worker_finishHelper_routine(finish_t* finish) {
                 int i = 1;
                 while (i<nb_workers) {
                     task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-                    if (tracing_enabled) {
-                        if(task) {
+                    if(task) {
+                        if (tracing_enabled) {
                             //append the task info to its list before executing
                             taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
                             info->task_id = task->task_id;
@@ -350,9 +345,9 @@ void slave_worker_finishHelper_routine(finish_t* finish) {
                             info->steal_counter = workers[wid].steal_counter++;
                             info->next = NULL;
                             append_task_info(workers[wid].my_info, info);
-                            workers[wid].total_steals++;
-                            break;
                         }
+                        workers[wid].total_steals++;
+                        break;
                     }
                     i++;
                 }
@@ -461,8 +456,8 @@ void* worker_routine(void * args) {
                 int i = 1;
                 while (i<nb_workers) {
                     task = dequeSteal(workers[(wid+i)%(nb_workers)].deque);
-                    if (tracing_enabled) {
-                        if(task) {
+                    if(task) {
+                        if (tracing_enabled) {
                             //append the task info to its list before executing
                             taskInfo_t *info = (taskInfo_t *) malloc(sizeof(taskInfo_t));
                             info->task_id = task->task_id;
@@ -470,10 +465,10 @@ void* worker_routine(void * args) {
                             info->ws_id = wid;
                             info->steal_counter = workers[wid].steal_counter++;
                             info->next = NULL;
-                            workers[wid].total_steals++;
                             append_task_info(workers[wid].my_info, info);
-                            break;
                         }
+                        workers[wid].total_steals++;
+                        break;
                     }
                     i++;
                 }
